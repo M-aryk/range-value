@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.concurrent.*;
 
 public class Main {
 
@@ -10,37 +11,52 @@ public class Main {
         }
 
         long startTs = System.currentTimeMillis();
-        List<Thread> threads = new ArrayList<>();
-        // start time
-        for (String text : texts) {
-            Thread thread = new Thread(()-> {
-                int maxSize = 0;
-                for (int i = 0; i < text.length(); i++) {
-                    for (int j = 0; j < text.length(); j++) {
-                        if (i >= j) {
-                            continue;
-                        }
-                        boolean bFound = false;
-                        for (int k = i; k < j; k++) {
-                            if (text.charAt(k) == 'b') {
-                                bFound = true;
-                                break;
+
+        List<Future> futures = new ArrayList<>();
+        try (ExecutorService executorService = Executors.newFixedThreadPool(4)) {
+            // start time
+            for (String text : texts) {
+                Callable<Integer> myCallable = () -> {
+                    int maxSize = 0;
+                    for (int i = 0; i < text.length(); i++) {
+                        for (int j = 0; j < text.length(); j++) {
+                            if (i >= j) {
+                                continue;
+                            }
+                            boolean bFound = false;
+                            for (int k = i; k < j; k++) {
+                                if (text.charAt(k) == 'b') {
+                                    bFound = true;
+                                    break;
+                                }
+                            }
+                            if (!bFound && maxSize < j - i) {
+                                maxSize = j - i;
                             }
                         }
-                        if (!bFound && maxSize < j - i) {
-                            maxSize = j - i;
-                        }
                     }
-                }
-                System.out.println(text.substring(0, 100) + " -> " + maxSize);
-            });
-            thread.start();
-            threads.add(thread);
+                    System.out.println(text.substring(0, 100) + " -> " + maxSize);
+                    return maxSize;
+                };
+
+                Future<Integer> task = executorService.submit(myCallable);
+                futures.add(task);
+            }
+            executorService.shutdown();
         }
 
-        for (Thread thr : threads) {
-            thr.join(); // зависаем, ждём когда поток объект которого лежит в thread завершится
-        }
+        OptionalInt max = futures.stream()
+                .mapToInt(future -> {
+                    try {
+                        return (int) future.get();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    } catch (ExecutionException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .max();
+        System.out.println(max.getAsInt());
 
         long endTs = System.currentTimeMillis(); // end time
 
